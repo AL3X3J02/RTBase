@@ -49,27 +49,28 @@ void runTests()
 
     // Test Sphere ray intersection
     {
-        Sphere sphere;
-        sphere.init(Vec3(0, 0, 0), 1.0f); // Sphere at origin with radius 1
+            Sphere sphere;
+            Vec3 center(0, 0, 0); // Create a named Vec3 object
+            sphere.init(center, 1.0f); // Sphere at origin with radius 1
 
-        // Test ray that intersects the sphere
-        Ray ray1(Vec3(0, 0, -2), Vec3(0, 0, 1)); // Ray pointing towards the sphere
-        float t1;
-        bool intersect1 = sphere.rayIntersect(ray1, t1);
-        std::cout << "Test 5 (Ray intersects sphere): " << (intersect1 ? "PASSED" : "FAILED") << std::endl;
+            // Test ray that intersects the sphere
+            Ray ray1(Vec3(0, 0, -2), Vec3(0, 0, 1)); // Ray pointing towards the sphere
+            float t1;
+            bool intersect1 = sphere.rayIntersect(ray1, t1);
+            std::cout << "Test 5 (Ray intersects sphere): " << (intersect1 ? "PASSED" : "FAILED") << std::endl;
 
-        // Test ray that misses the sphere
-        Ray ray2(Vec3(2, 2, 2), Vec3(0, 0, 1)); // Ray pointing away from the sphere
-        float t2;
-        bool intersect2 = sphere.rayIntersect(ray2, t2);
-        std::cout << "Test 6 (Ray misses sphere): " << (!intersect2 ? "PASSED" : "FAILED") << std::endl;
+            // Test ray that misses the sphere
+            Ray ray2(Vec3(2, 2, 2), Vec3(0, 0, 1)); // Ray pointing away from the sphere
+            float t2;
+            bool intersect2 = sphere.rayIntersect(ray2, t2);
+            std::cout << "Test 6 (Ray misses sphere): " << (!intersect2 ? "PASSED" : "FAILED") << std::endl;
 
-        // Test ray that starts inside the sphere
-        Ray ray3(Vec3(0, 0, 0), Vec3(0, 0, 1)); // Ray starts at the sphere's centre
-        float t3;
-        bool intersect3 = sphere.rayIntersect(ray3, t3);
-        std::cout << "Test 7 (Ray starts inside sphere): " << (intersect3 ? "PASSED" : "FAILED") << std::endl;
-    }
+            // Test ray that starts inside the sphere
+            Ray ray3(Vec3(0, 0, 0), Vec3(0, 0, 1)); // Ray starts at the sphere's centre
+            float t3;
+            bool intersect3 = sphere.rayIntersect(ray3, t3);
+            std::cout << "Test 7 (Ray starts inside sphere): " << (intersect3 ? "PASSED" : "FAILED") << std::endl;
+        }
 
     // Test Plane ray intersection
     {
@@ -106,8 +107,9 @@ int main(int argc, char* argv[])
     runTests();
 
     // Initialize default parameters
-    //std::string sceneName = "cornell-box";
-    std::string sceneName = "Sibenik";
+    std::string sceneName = "cornell-box";
+    //std::string sceneName = "Bathroom";
+   //std::string sceneName = "MaterialsScene";
     std::string filename = "GI.hdr";
     unsigned int SPP = 8192;
 

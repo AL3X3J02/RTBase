@@ -17,18 +17,27 @@ public:
 	float width = 0;
 	float height = 0;
 	Vec3 origin;
+	Vec3 viewDirection;
+	float Afilm;
 	void init(Matrix ProjectionMatrix, int screenwidth, int screenheight)
 	{
 		projectionMatrix = ProjectionMatrix;
 		inverseProjectionMatrix = ProjectionMatrix.invert();
 		width = (float)screenwidth;
 		height = (float)screenheight;
+		float Wlens = (2.0f / ProjectionMatrix.a[1][1]);
+		float aspect = ProjectionMatrix.a[0][0] / ProjectionMatrix.a[1][1];
+		float Hlens = Wlens * aspect;
+		Afilm = Wlens * Hlens;
 	}
 	void updateView(Matrix V)
 	{
 		camera = V;
 		cameraToView = V.invert();
 		origin = camera.mulPoint(Vec3(0, 0, 0));
+		viewDirection = inverseProjectionMatrix.mulPointAndPerspectiveDivide(Vec3(0, 0, 1));
+		viewDirection = camera.mulVec(viewDirection);
+		viewDirection = viewDirection.normalize();
 	}
 	// Add code here
 	/*Ray generateRay(float x, float y)
@@ -57,10 +66,9 @@ public:
 		xprime = (xprime * 2.0f) - 1.0f;
 		yprime = (yprime * 2.0f) - 1.0f;
 		Vec3 dir(xprime, yprime, 1.0f);
-		dir = inverseProjectionMatrix.mulPointAndPerspectiveDivide(dir);
+		dir = inverseProjectionMatrix.mulPoint(dir);
 		dir = camera.mulVec(dir);
-		dir = dir.normalize();
-		return Ray(origin, dir);
+		return Ray(origin, dir.normalize());
 	}
 
 	bool projectOntoCamera(const Vec3& p, float& x, float& y)
@@ -80,8 +88,6 @@ public:
 	}
 };
 
-
-
 class Scene
 {
 public:
@@ -89,20 +95,14 @@ public:
 	std::vector<BSDF*> materials;
 	std::vector<Light*> lights;
 	Light* background = NULL;
-	BVHNode* bvh = NULL;
+	std::unique_ptr<BVHNode> bvh = std::make_unique<BVHNode>();
 	Camera camera;
 	AABB bounds;
 	void build()
 	{
-		// Add BVH building code here  
-		std::vector<Triangle> inputTriangles;
-		for (int i = 0; i < triangles.size(); i++)
-		{
-			inputTriangles.push_back(triangles[i]);
-		}
-		triangles.clear();
-		bvh = new BVHNode();
-		bvh->build(inputTriangles, triangles);
+		// Add BVH building code here
+		if (triangles.size() > 0) bvh->build(triangles, 0, triangles.size());
+		else std::cout << "No triangles in scene!" << std::endl;
 
 		// Do not touch the code below this line!
 		// Build light list
@@ -119,37 +119,16 @@ public:
 	}
 	IntersectionData traverse(const Ray& ray)
 	{
-		return bvh->traverse(ray, triangles);  
-
 		IntersectionData intersection;
 		intersection.t = FLT_MAX;
-		for (int i = 0; i < triangles.size(); i++)
-		{
-			float t;
-			float u;
-			float v;
-			if (triangles[i].rayIntersect(ray, t, u, v))
-			{
-				if (t < intersection.t)
-				{
-					intersection.t = t;
-					intersection.ID = i;
-					intersection.alpha = u;
-					intersection.beta = v;
-					intersection.gamma = 1.0f - (u + v);
-				}
-			}
-		}
+		bvh->traverse(ray, triangles, intersection);
 		return intersection;
 	}
-
-
-
 	Light* sampleLight(Sampler* sampler, float& pmf)
 	{
 		float r1 = sampler->next();
 		pmf = 1.0f / (float)lights.size();
-		return lights[std::min((int)(r1 * lights.size()), (int)(lights.size() - 1))];
+		return lights[std::min((int)(r1 * (float)lights.size()), (int)(lights.size() - 1))];
 	}
 	// Do not modify any code below this line
 	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background)

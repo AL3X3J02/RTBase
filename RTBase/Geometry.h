@@ -1,7 +1,9 @@
 #pragma once
-#define EPSILON 0.0001f
+
+#include<algorithm>
 #include "Core.h"
 #include "Sampling.h"
+#define EPSILON 0.000001f
 
 class Ray
 {
@@ -62,9 +64,6 @@ public:
 	}
 };
 
-#define EPSILON 0.001f
-
-const static float g_fEPSILON = 0.000001f;
 class Triangle
 {
 public:
@@ -72,98 +71,46 @@ public:
 	Vec3 e1; // Edge 1
 	Vec3 e2; // Edge 2
 	Vec3 n; // Geometric Normal
-
 	float area; // Triangle area
+	float invarea; // Inverse area
 	float d; // For ray triangle if needed
 	unsigned int materialIndex;
-
-	Vec3 v0v1;
-	Vec3 v0v2;
-
-	void init(const Vertex& v0, const Vertex& v1, const Vertex& v2, const unsigned int& _materialIndex)
+	void init(Vertex v0, Vertex v1, Vertex v2, unsigned int _materialIndex)
 	{
 		materialIndex = _materialIndex;
 		vertices[0] = v0;
 		vertices[1] = v1;
 		vertices[2] = v2;
-
-		e1 = vertices[2].p - vertices[1].p;
-		e2 = vertices[0].p - vertices[2].p;
+		e1 = vertices[1].p - vertices[0].p;
+		e2 = vertices[2].p - vertices[0].p;
 		n = e1.cross(e2).normalize();
 		area = e1.cross(e2).length() * 0.5f;
-		d = Dot(n, vertices[0].p);
-
-		v0v1 = v1.p - v0.p;
-		v0v2 = v2.p - v0.p;
+		invarea = 1.0f / area;
+		d = -Dot(n, vertices[0].p);
 	}
 	Vec3 centre() const
 	{
 		return (vertices[0].p + vertices[1].p + vertices[2].p) / 3.0f;
 	}
-	// Add code here
+
+	// Möller-Trumbore
 	bool rayIntersect(const Ray& r, float& t, float& u, float& v) const
 	{
-		float denom = Dot(n, r.dir);
-		if (denom == 0) { return false; }
-		t = (d - Dot(n, r.o)) / denom;
-		if (t < 0) { return false; }
-		Vec3 p = r.at(t);
-		float invArea = 1.0f / Dot(e1.cross(e2), n);
-		u = Dot(e1.cross(p - vertices[1].p), n) * invArea;
-		if (u < 0 || u > 1.0f) { return false; }
-		v = Dot(e2.cross(p - vertices[2].p), n) * invArea;
-		if (v < 0 || (u + v) > 1.0f) { return false; }
+		Vec3 s = r.o - vertices[0].p;
+		Vec3 s1 = r.dir.cross(e2);
+		Vec3 s2 = s.cross(e1);
+		float invDet = s1.dot(e1);
+		if (std::abs(invDet) < EPSILON) return false;
+		invDet = 1.0f / invDet;
+
+		t = s2.dot(e2) * invDet;
+		u = s1.dot(s) * invDet;
+		v = s2.dot(r.dir) * invDet;
+		if (t < 0.0f || u < 0.0f || v < 0.0f || u + v > 1.0f) return false;
+
 		return true;
+
 	}
-	//Add Moller trumbore
-	bool rayIntersectMollerTrumbore(const Ray& r, float& t, float& u, float& v) const
-	{
-		const Vec3 pvec = Cross(r.dir, v0v2);
-		const float det = Dot(v0v1, pvec);
-
-		if (det < g_fEPSILON
-			&& det > -g_fEPSILON)
-			return false;
-
-		const float invDet = 1.0f / det;
-		const Vec3 tvec = r.o - vertices[0].p;
-		u = Dot(tvec, pvec) * invDet;
-
-		if (u < 0.0f || u > 1.0f)
-			return false;
-
-		const Vec3 qvec = Cross(tvec, v0v1);
-		v = Dot(r.dir, qvec) * invDet;
-
-		if (v < 0.0f || (u + v) > 1.0f)
-			return false;
-
-		t = Dot(v0v2, qvec) * invDet;
-
-		return true;
-	}
-	/*bool rayIntersect(const Ray& r, float& t, float& u, float& v) const
-	{
-		t = (d-Dot(n, r.o) ) / Dot(n, r.dir);
-		if (t < 0.f) return false;
-
-		Vec3 P = r.at(t);
-		Vec3 q1 = P - vertices[0].p;
-		Vec3 C1 = Cross(e1, q1);
-
-		u = Dot(C1 , n) / area;
-		if (u > 1.f || u < 0.f)return false;
-
-		Vec3 q2 = P - vertices[1].p;
-		Vec3 C2 = Cross(e2, q2);
-
-		v = Dot(C2, n) / area;
-		if (v > 1.f || v < 0.f) return false;
-
-		if (u + v > 1.f) return false;
-
-		return true;
-	}*/
 	void interpolateAttributes(const float alpha, const float beta, const float gamma, Vec3& interpolatedNormal, float& interpolatedU, float& interpolatedV) const
 	{
 		interpolatedNormal = vertices[0].normal * alpha + vertices[1].normal * beta + vertices[2].normal * gamma;
@@ -171,22 +118,21 @@ public:
 		interpolatedU = vertices[0].u * alpha + vertices[1].u * beta + vertices[2].u * gamma;
 		interpolatedV = vertices[0].v * alpha + vertices[1].v * beta + vertices[2].v * gamma;
 	}
-	// Add code here
 
 	Vec3 sample(Sampler* sampler, float& pdf)
 	{
-		float r1 = sampler->next();
-		float r2 = sampler->next();
+		float u1 = sampler->next();
+		float u2 = sampler->next();
 
-		float alpha = 1.0f - sqrt(r1);
-		float beta = r2 * sqrt(r1);
+		float su1 = sqrt(u1);
+		float alpha = 1.0f - su1;
+		float beta = u2 * su1;
 		float gamma = 1.0f - alpha - beta;
 
-		Vec3 point = vertices[0].p * alpha + vertices[1].p * beta + vertices[2].p * gamma;
+		Vec3 p = vertices[0].p * alpha + vertices[1].p * beta + vertices[2].p * gamma;
+		pdf = invarea;
 
-		pdf = 1.0f / area;
-
-		return point;
+		return p;
 	}
 	Vec3 gNormal()
 	{
@@ -360,189 +306,109 @@ public:
 	BVHNode* l;
 	// This can store an offset and number of triangles in a global triangle list for example
 	// But you can store this however you want!
-	// unsigned int offset;
-	// unsigned char num;
-	int startIndex;
-	int triangleCount;
+	unsigned int offset = 0;
+	unsigned int num = 0;
+
+	bool isLeaf()
+	{
+		return (r == NULL && l == NULL);
+	}
 
 	BVHNode()
 	{
 		r = NULL;
 		l = NULL;
 	}
-	// Note there are several options for how to implement the build method. Update this as required
-	void build(std::vector<Triangle>& inputTriangles, std::vector<Triangle>& outputTriangles, int depth = 0)
+	~BVHNode()
 	{
-		// Record the starting index in the output array
-		startIndex = outputTriangles.size();
+		if (r) delete r;
+		if (l) delete l;
+	}
+	// Note there are several options for how to implement the build method. Update this as required
+	void build(std::vector<Triangle>& inputTriangles, int start, int end)
+	{
 
-		// If the input is empty, return without doing anything
-		if (inputTriangles.empty())
-			return;
-
-		// Calculate bounds for all triangles
-		bounds.reset();
-		for (const Triangle& tri : inputTriangles)
-		{
-			bounds.extend(tri.vertices[0].p);
-			bounds.extend(tri.vertices[1].p);
-			bounds.extend(tri.vertices[2].p);
+		// Add BVH building code here
+		// Calculate bounds
+		for (int i = start; i < end; i++) {
+			bounds.extend(inputTriangles[i].vertices[0].p);
+			bounds.extend(inputTriangles[i].vertices[1].p);
+			bounds.extend(inputTriangles[i].vertices[2].p);
 		}
 
-		// If we have a small number of triangles, make this a leaf node
-		if (inputTriangles.size() <= MAXNODE_TRIANGLES || depth > 20) // Add depth limit
-		{
-			triangleCount = inputTriangles.size();
-			for (const Triangle& tri : inputTriangles)
-				outputTriangles.push_back(tri);
+		// If it has less than 8 triangles, it is a leaf node
+		int numTriangles = end - start;
+		if (numTriangles <= MAXNODE_TRIANGLES) {
+			offset = start;
+			num = numTriangles;
 			return;
 		}
 
-		// Find the axis with the largest extent
-		Vec3 extents = bounds.max - bounds.min;
-		int axis = 0;
-		if (extents.y > extents.x) axis = 1;
-		if (extents.z > (axis == 0 ? extents.x : extents.y)) axis = 2;
-
-		// SAH evaluation
+		//SAH
 		float bestCost = FLT_MAX;
-		int bestBin = -1;
+		int bestAxis = -1;
+		int bestSplit = -1;
+		//std::vector<Triangle> originalTriangles(inputTriangles.begin() + start, inputTriangles.begin() + end);
+		for (int axis = 0; axis < 3; axis++) {
+			//std::vector<Triangle> iTriangles(originalTriangles);
+			std::vector<Triangle> tempTriangles(inputTriangles.begin() + start, inputTriangles.begin() + end);
 
-		// Calculate min and max for the axis we're splitting on
-		float axisMin = (axis == 0) ? bounds.min.x : ((axis == 1) ? bounds.min.y : bounds.min.z);
-		float axisMax = (axis == 0) ? bounds.max.x : ((axis == 1) ? bounds.max.y : bounds.max.z);
-		float axisRange = axisMax - axisMin;
+			std::stable_sort(tempTriangles.begin(), tempTriangles.end(),
+				[axis](const Triangle& a, const Triangle& b) {
+					float aCenter = a.vertices[0].p.coords[axis] + a.vertices[1].p.coords[axis] + a.vertices[2].p.coords[axis];
+					float bCenter = b.vertices[0].p.coords[axis] + b.vertices[1].p.coords[axis] + b.vertices[2].p.coords[axis];
+					return aCenter < bCenter;
+				});
 
-		struct Bin {
-			AABB bounds;
-			int count = 0;
-		};
-		std::vector<Bin> bins(BUILD_BINS);
-
-		// Assign triangles to bins based on their centers
-		for (const Triangle& tri : inputTriangles)
-		{
-			Vec3 center = tri.centre();
-			float centroid;
-			if (axis == 0) centroid = center.x;
-			else if (axis == 1) centroid = center.y;
-			else centroid = center.z;
-
-			int binIndex = std::min(BUILD_BINS - 1, static_cast<int>((centroid - axisMin) / axisRange * BUILD_BINS));
-
-			bins[binIndex].count++;
-			bins[binIndex].bounds.extend(tri.vertices[0].p);
-			bins[binIndex].bounds.extend(tri.vertices[1].p);
-			bins[binIndex].bounds.extend(tri.vertices[2].p);
-		}
-
-		// Evaluate SAH for each possible split position
-		std::vector<AABB> leftAcc(BUILD_BINS);
-		std::vector<AABB> rightAcc(BUILD_BINS);
-		std::vector<int> leftCount(BUILD_BINS, 0);
-		std::vector<int> rightCount(BUILD_BINS, 0);
-
-		// Left-to-right sweep to accumulate left bounds and counts
-		leftAcc[0] = bins[0].bounds;
-		leftCount[0] = bins[0].count;
-		for (int i = 1; i < BUILD_BINS; i++)
-		{
-			leftAcc[i] = leftAcc[i - 1];
-			if (bins[i].count > 0)
-			{
-				leftAcc[i].extend(bins[i].bounds.min);
-				leftAcc[i].extend(bins[i].bounds.max);
+			std::vector<AABB> leftBounds(numTriangles), rightBounds(numTriangles);
+			AABB box1, box2;
+			for (int i = 0; i < numTriangles; i++) {
+				box1.extend(tempTriangles[i].vertices[0].p);
+				box1.extend(tempTriangles[i].vertices[1].p);
+				box1.extend(tempTriangles[i].vertices[2].p);
+				leftBounds[i] = box1;
 			}
-			leftCount[i] = leftCount[i - 1] + bins[i].count;
-		}
-
-		// Right-to-left sweep to accumulate right bounds and counts
-		rightAcc[BUILD_BINS - 1] = bins[BUILD_BINS - 1].bounds;
-		rightCount[BUILD_BINS - 1] = bins[BUILD_BINS - 1].count;
-		for (int i = BUILD_BINS - 2; i >= 0; i--)
-		{
-			rightAcc[i] = rightAcc[i + 1];
-			if (bins[i].count > 0)
-			{
-				rightAcc[i].extend(bins[i].bounds.min);
-				rightAcc[i].extend(bins[i].bounds.max);
+			for (int i = numTriangles - 1; i >= 0; i--) {
+				box2.extend(tempTriangles[i].vertices[0].p);
+				box2.extend(tempTriangles[i].vertices[1].p);
+				box2.extend(tempTriangles[i].vertices[2].p);
+				rightBounds[i] = box2;
 			}
-			rightCount[i] = rightCount[i + 1] + bins[i].count;
-		}
 
-		// Evaluate SAH for each potential split
-		for (int i = 0; i < BUILD_BINS - 1; i++)
-		{
-			if (leftCount[i] == 0 || rightCount[i + 1] == 0)
-				continue;
+			// Calculate the best split
+			for (int i = 1; i < numTriangles; i++) {
 
-			float surfaceAreaLeft = leftAcc[i].area();
-			float surfaceAreaRight = rightAcc[i + 1].area();
-			float totalSurfaceArea = bounds.area();
+				float cost = TRAVERSE_COST +
+					leftBounds[i - 1].area() / bounds.area() * i * TRIANGLE_COST +
+					rightBounds[i].area() / bounds.area() * (numTriangles - i) * TRIANGLE_COST;
 
-			float costLeft = (surfaceAreaLeft / totalSurfaceArea) * leftCount[i] * TRIANGLE_COST;
-			float costRight = (surfaceAreaRight / totalSurfaceArea) * rightCount[i + 1] * TRIANGLE_COST;
-			float cost = TRAVERSE_COST + costLeft + costRight;
-
-			if (cost < bestCost)
-			{
-				bestCost = cost;
-				bestBin = i;
+				if (cost < bestCost) {
+					bestCost = cost;
+					bestAxis = axis;
+					bestSplit = start + i;
+				}
 			}
 		}
-
-		// Calculate the cost of not splitting (leaf cost)
-		float leafCost = inputTriangles.size() * TRIANGLE_COST;
-
-		if (bestCost >= leafCost || bestBin == -1)
+		// can not find best spilt
+		if (bestAxis == -1 || bestSplit <= start || bestSplit >= end)
 		{
-			for (const Triangle& tri : inputTriangles)
-				outputTriangles.push_back(tri);
+			offset = start;
+			num = numTriangles;
 			return;
 		}
 
-		// Split position
-		float splitPos = axisMin + (bestBin + 1) * axisRange / BUILD_BINS;
-
-		// Partition triangles
-		std::vector<Triangle> leftTriangles;
-		std::vector<Triangle> rightTriangles;
-
-		for (const Triangle& tri : inputTriangles)
-		{
-			Vec3 center = tri.centre();
-			float value;
-			if (axis == 0) value = center.x;
-			else if (axis == 1) value = center.y;
-			else value = center.z;
-
-			if (value <= splitPos)
-				leftTriangles.push_back(tri);
-			else
-				rightTriangles.push_back(tri);
-		}
-
-		// Handle edge cases
-		if (leftTriangles.empty() || rightTriangles.empty())
-		{
-			size_t halfSize = inputTriangles.size() / 2;
-			leftTriangles.clear();
-			rightTriangles.clear();
-
-			for (size_t i = 0; i < inputTriangles.size(); i++)
-			{
-				if (i < halfSize)
-					leftTriangles.push_back(inputTriangles[i]);
-				else
-					rightTriangles.push_back(inputTriangles[i]);
-			}
-		}
+		//sort triangle vector according to best axis
+		std::stable_sort(inputTriangles.begin() + start, inputTriangles.begin() + end,
+			[bestAxis](const Triangle& a, const Triangle& b) {
+				float aCenter = a.vertices[0].p.coords[bestAxis] + a.vertices[1].p.coords[bestAxis] + a.vertices[2].p.coords[bestAxis];
+				float bCenter = b.vertices[0].p.coords[bestAxis] + b.vertices[1].p.coords[bestAxis] + b.vertices[2].p.coords[bestAxis];
+				return aCenter < bCenter;
+			});
 
 		l = new BVHNode();
 		r = new BVHNode();
-
-		l->build(leftTriangles, outputTriangles, depth + 1);
-		r->build(rightTriangles, outputTriangles, depth + 1);
+		l->build(inputTriangles, start, bestSplit);
+		r->build(inputTriangles, bestSplit, end);
 	}
 	void traverse(const Ray& ray, const std::vector<Triangle>& triangles, IntersectionData& intersection)
 	{
@@ -556,13 +422,13 @@ public:
 			return;
 
 		// If this is a leaf node (no children)
-		if (l == NULL && r == NULL)
+		if (isLeaf())
 		{
 			// Test only triangles in this leaf node's range
-			for (int i = startIndex; i < startIndex + triangleCount; i++)
+			for (int i = offset; i < offset + num; i++)
 			{
 				float triT, u, v;
-				if (triangles[i].rayIntersectMollerTrumbore(ray, triT, u, v))
+				if (triangles[i].rayIntersect(ray, triT, u, v))
 				{
 					if (triT < intersection.t)
 					{
@@ -622,16 +488,16 @@ public:
 			return true;
 
 		// If this is a leaf node (no children)
-		if (l == NULL && r == NULL)
+		if (isLeaf())
 		{
 			// Test only triangles in this leaf node's range
-			for (int i = startIndex; i < startIndex + triangleCount; i++)
+			for (int i = offset; i < offset + num; i++)
 			{
 				const Triangle& tri = triangles[i];
 				float triT, u, v;
 
 				// Use the Möller-Trumbore algorithm for ray-triangle intersection
-				if (tri.rayIntersectMollerTrumbore(ray, triT, u, v))
+				if (tri.rayIntersect(ray, triT, u, v))
 				{
 					// If we hit something within our max distance, the path is blocked
 					if (triT < maxT)
