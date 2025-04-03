@@ -123,9 +123,19 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 	if (instance.material.find("bsdf").getValue("") == "glass")
 	{
 		std::string filename = sceneName + "/" + instance.material.find("reflectance").getValue("");
-		float intIOR = instance.material.find("intIOR").getValue(1.33f);
-		float extIOR = instance.material.find("extIOR").getValue(1.0f);
-		material = new GlassBSDF(loadTexture(filename, textureManager), intIOR, extIOR);
+		float roughness = 0.0f;
+		if (instance.material.find("roughness").getValue(0.0f) > 0.001f) {
+			float intIOR = instance.material.find("intIOR").getValue(1.5f);
+			float extIOR = instance.material.find("extIOR").getValue(1.0f);
+			material = new DielectricBSDF(loadTexture(filename, textureManager), intIOR, extIOR, roughness);
+			DielectricBSDF* dielectric = static_cast<DielectricBSDF*>(material);
+			dielectric->volumetricScattering = false;
+			dielectric->scatteringCoefficient = 0.0f;
+		} else {
+			float intIOR = instance.material.find("intIOR").getValue(1.5f);
+			float extIOR = instance.material.find("extIOR").getValue(1.0f);
+			material = new GlassBSDF(loadTexture(filename, textureManager), intIOR, extIOR);
+		}
 		meshMaterials.push_back(material);
 	}
 	if (instance.material.find("bsdf").getValue("") == "mirror")
@@ -146,7 +156,7 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 	if (instance.material.find("bsdf").getValue("") == "dielectric")
 	{
 		std::string filename = sceneName + "/" + instance.material.find("reflectance").getValue("");
-		float intIOR = instance.material.find("intIOR").getValue(1.33f);
+		float intIOR = instance.material.find("intIOR").getValue(1.5f);
 		float extIOR = instance.material.find("extIOR").getValue(1.0f);
 		material = new GlassBSDF(loadTexture(filename, textureManager), intIOR, extIOR);
 		float roughness = instance.material.find("roughness").getValue(1.0f);
@@ -181,7 +191,7 @@ void loadInstance(std::string sceneName, std::vector<Triangle>& meshTriangles, s
 		BSDF* base = material;
 		Colour sigmaa;
 		instance.material.find("coatingSigmaA").getValuesAsVector3(sigmaa.r, sigmaa.g, sigmaa.b);
-		float intIOR = instance.material.find("coatingIntIOR").getValue(1.33f);
+		float intIOR = instance.material.find("coatingIntIOR").getValue(1.5f);
 		float extIOR = instance.material.find("coatingExtIOR").getValue(1.0f);
 		float thickness = instance.material.find("coatingThickness").getValue(0.0f);
 		material = new LayeredBSDF(base, sigmaa, thickness, intIOR, extIOR);
