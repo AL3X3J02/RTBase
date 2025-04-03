@@ -13,6 +13,15 @@
 
 #define SQ(x) (x * x)
 
+// Add custom max and min functions to avoid namespace conflicts
+inline float Max(float a, float b) {
+    return a > b ? a : b;
+}
+
+inline float Min(float a, float b) {
+    return a < b ? a : b;
+}
+
 class Colour
 {
 public:

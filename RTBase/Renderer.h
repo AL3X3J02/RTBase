@@ -10,7 +10,8 @@
 #include "GamesEngineeringBase.h"
 #include <thread>
 #include <functional>
-#include <OpenImageDenoise/oidn.hpp>  // Added OIDN header
+#include <algorithm>
+// #include <OpenImageDenoise/oidn.hpp>  // Added OIDN header - 注释掉OIDN头文件
 
 static MTRandom* samplers;
 
@@ -23,7 +24,7 @@ public:
 	std::thread** threads;
 	int numProcs;
 
-	// Add buffers for denoiser
+	// Add buffers for denoiser - 这些变量保留但不使用
 	float* colorBuffer;
 	float* albedoBuffer;
 	float* normalBuffer;
@@ -32,9 +33,9 @@ public:
 
 	// Denoiser strength adjuster
 	// Move this into Main 
-	float denoiseStrength = 0.0f; // Adjustable between 0.0 (no denoising) and 1.0 (full denoising). Unfortunatly this doesnt work too well making it way too blurry.
+	float denoiseStrength = 0.0f; // 设置为0，完全禁用去噪
 
-	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas, bool _enableDenoising = true)
+	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas, bool _enableDenoising = false)
 	{
 		scene = _scene;
 		canvas = _canvas;
@@ -44,7 +45,7 @@ public:
 		GetSystemInfo(&sysInfo);
 		numProcs = sysInfo.dwNumberOfProcessors;
 		threads = new std::thread * [numProcs];
-		enableDenoising = _enableDenoising;
+		enableDenoising = false; // 设置为false，禁用去噪
 
 		// Allocate samplers array once
 		samplers = new MTRandom[numProcs];
@@ -94,7 +95,7 @@ public:
 			Vec3 wi = p - shadingData.x;
 			float l = wi.lengthSq();
 			wi = wi.normalize();
-			float GTerm = (max(Dot(wi, shadingData.sNormal), 0.0f) * max(-Dot(wi, light->normal(shadingData, wi)), 0.0f)) / l;
+			float GTerm = (Max(Dot(wi, shadingData.sNormal), 0.0f) * Max(-Dot(wi, light->normal(shadingData, wi)), 0.0f)) / l;
 			if (GTerm > 0)
 			{
 				// Trace
@@ -109,7 +110,7 @@ public:
 		{
 			// Calculate GTerm
 			Vec3 wi = p;
-			float GTerm = max(Dot(wi, shadingData.sNormal), 0.0f);
+			float GTerm = Max(Dot(wi, shadingData.sNormal), 0.0f);
 			if (GTerm > 0)
 			{
 				// Trace
@@ -141,11 +142,11 @@ public:
 				}
 			}
 			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
-			if (depth > 5)
+			if (depth > 10)
 			{
 				return direct;
 			}
-			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
+			float russianRouletteProbability = Min(pathThroughput.Lum(), 0.9f);
 			if (sampler->next() < russianRouletteProbability)
 			{
 				pathThroughput = pathThroughput / russianRouletteProbability;
@@ -159,7 +160,12 @@ public:
 			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, indirect, pdf);
 
 			pathThroughput = pathThroughput * indirect * fabsf(Dot(wi, shadingData.sNormal)) / pdf;
-			r.init(shadingData.x + (wi * EPSILON), wi);
+			
+			float rayEpsilon = EPSILON;
+			if (shadingData.bsdf->isPureSpecular()) {
+				rayEpsilon = EPSILON * 10.0f;
+			}
+			r.init(shadingData.x + (wi * rayEpsilon), wi);
 
 			return (direct + pathTrace(r, pathThroughput, depth + 1, sampler, shadingData.bsdf->isPureSpecular()));
 		}
@@ -220,7 +226,7 @@ public:
 		wi = wi.normalize();
 
 		// Check if normal is facing the camera (cosine term)
-		float cosTheta = max(Dot(n, wi), 0.0f);
+		float cosTheta = Max(Dot(n, wi), 0.0f);
 		if (cosTheta <= 0.0f)
 			return;
 
@@ -232,7 +238,7 @@ public:
 			return;
 
 		// Compute geometry term between p and camera
-		float cameraCosTheta = max(Dot(-wi, scene->camera.viewDirection), 0.0f);
+		float cameraCosTheta = Max(Dot(-wi, scene->camera.viewDirection), 0.0f);
 
 		// Geometry term: cos(θ) * cos(θ') / r²
 		float G = (cosTheta * cameraCosTheta) / distanceSquared;
@@ -393,7 +399,7 @@ public:
 			connectToCamera(shadingData.x, shadingData.sNormal, pathThroughput);
 
 			// Russian roulette for path termination
-			float russianRouletteProbability = min(pathThroughput.Lum(), 0.9f);
+			float russianRouletteProbability = Min(pathThroughput.Lum(), 0.9f);
 			if (sampler->next() >= russianRouletteProbability)
 				return;
 
@@ -503,13 +509,14 @@ public:
 		}
 
 		// Apply denoising if enabled
-		if (enableDenoising) {
+		/*if (enableDenoising) {
 			applyDenoising();
-		}
+		}*/
+		// 注释掉去噪的调用
 	}
 
 	// Run the denoiser and update the display
-	void applyDenoising()
+	/*void applyDenoising()
 	{
 		// Only run denoiser if strength > 0
 		if (denoiseStrength > 0.0f) {
@@ -570,10 +577,10 @@ public:
 			// If denoiseStrength is 0, just display the original image
 			// (The original image is already displayed by the render function)
 		}
-	}
+	}*/
 
 	// OIDN denoising function
-	void denoise(float* colorBuffer, float* albedoBuffer, float* normalBuffer, float* outputBuffer, int width, int height)
+	/*void denoise(float* colorBuffer, float* albedoBuffer, float* normalBuffer, float* outputBuffer, int width, int height)
 	{
 		// Create device
 		oidn::DeviceRef device = oidn::newDevice();
@@ -610,11 +617,11 @@ public:
 
 		// Copy the result back to the output buffer
 		memcpy(outputBuffer, outputBufferOIDN.getData(), width * height * 3 * sizeof(float));
-	}
+	}*/
 
 	// Toggle denoising on/off
 	void toggleDenoising(bool enable) {
-		enableDenoising = enable;
+		enableDenoising = false; // 始终设置为false，禁用去噪
 	}
 
 	// Destructor for clean up

@@ -25,6 +25,9 @@
     "filename": "2.gem",
     "world": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
     "bsdf": "glass",
+    "roughness": "0.2",
+    "intIOR": "1.5",
+    "extIOR": "1.0",
     "reflectance": "1_1_1.png"
 }, {
     "filename": "3.gem",
